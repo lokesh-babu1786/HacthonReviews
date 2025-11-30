@@ -1,0 +1,549 @@
+// telemed.js
+const express = require('express');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const { v4: uuid } = require('uuid');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const JWT_SECRET = 'dev-secret-change-in-prod';
+
+// In-memory storage (demo)
+const users = []; // {id, name, email, role, passwordHash, verified}
+const appointments = []; // {id, patientId, doctorId, slot, status, notes}
+const prescriptions = []; // {id, appointmentId, items[], dosage, signature, fulfilled}
+const labReports = []; // {id, patientId, testName, fileUrl, verifiedBy}
+
+// ---------- Auth middleware ----------
+function authMiddleware(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ message: 'Missing token' });
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload; // {id, role, name}
+    next();
+  } catch (e) {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+}
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) return res.status(403).json({ message: 'Forbidden' });
+    next();
+  };
+}
+
+// ---------- Auth endpoints ----------
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password, role } = req.body;
+  if (!name || !email || !password || !role) return res.status(400).json({ message: 'Missing fields' });
+  if (users.find(u => u.email === email)) return res.status(409).json({ message: 'Email exists' });
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = { id: uuid(), name, email, role, passwordHash, verified: role !== 'doctor' ? true : false };
+  users.push(user);
+  res.json({ message: 'Registered', user: { id: user.id, name: user.name, email: user.email, role: user.role, verified: user.verified } });
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  const user = users.find(u => u.email === email);
+  if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+  const ok = await bcrypt.compare(password, user.passwordHash);
+  if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
+  const token = jwt.sign({ id: user.id, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '2h' });
+  res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, verified: user.verified } });
+});
+
+app.get('/api/users/me', authMiddleware, (req, res) => {
+  const user = users.find(u => u.id === req.user.id);
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role, verified: user.verified });
+});
+
+// ---------- Appointments ----------
+app.get('/api/appointments', authMiddleware, (req, res) => {
+  const { role, id } = req.user;
+  const data =
+    role === 'patient' ? appointments.filter(a => a.patientId === id)
+    : role === 'doctor' ? appointments.filter(a => a.doctorId === id)
+    : appointments;
+  res.json(data);
+});
+
+app.post('/api/appointments', authMiddleware, requireRole('patient'), (req, res) => {
+  const { doctorId, slot, notes } = req.body;
+  if (!doctorId || !slot) return res.status(400).json({ message: 'doctorId and slot required' });
+  const appt = { id: uuid(), patientId: req.user.id, doctorId, slot, status: 'scheduled', notes: notes || '' };
+  appointments.push(appt);
+  res.json(appt);
+});
+
+app.put('/api/appointments/:id', authMiddleware, (req, res) => {
+  const appt = appointments.find(a => a.id === req.params.id);
+  if (!appt) return res.status(404).json({ message: 'Not found' });
+  if (![appt.patientId, appt.doctorId].includes(req.user.id)) return res.status(403).json({ message: 'Forbidden' });
+  Object.assign(appt, req.body);
+  res.json(appt);
+});
+
+app.delete('/api/appointments/:id', authMiddleware, (req, res) => {
+  const idx = appointments.findIndex(a => a.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ message: 'Not found' });
+  const appt = appointments[idx];
+  if (![appt.patientId, appt.doctorId].includes(req.user.id)) return res.status(403).json({ message: 'Forbidden' });
+  appointments.splice(idx, 1);
+  res.json({ message: 'Deleted' });
+});
+
+// ---------- Prescriptions ----------
+app.get('/api/prescriptions', authMiddleware, (req, res) => {
+  const { role, id } = req.user;
+  const data =
+    role === 'patient'
+      ? prescriptions.filter(p => {
+          const appt = appointments.find(a => a.id === p.appointmentId);
+          return appt && appt.patientId === id;
+        })
+      : role === 'doctor'
+      ? prescriptions.filter(p => {
+          const appt = appointments.find(a => a.id === p.appointmentId);
+          return appt && appt.doctorId === id;
+        })
+      : prescriptions;
+  res.json(data);
+});
+
+app.post('/api/prescriptions', authMiddleware, requireRole('doctor'), (req, res) => {
+  const { appointmentId, items, dosage } = req.body;
+  if (!appointmentId || !items || !items.length) return res.status(400).json({ message: 'Invalid data' });
+  const pres = { id: uuid(), appointmentId, items, dosage, signature: `signed:${req.user.id}`, fulfilled: false };
+  prescriptions.push(pres);
+  res.json(pres);
+});
+
+app.put('/api/prescriptions/:id', authMiddleware, (req, res) => {
+  const pres = prescriptions.find(p => p.id === req.params.id);
+  if (!pres) return res.status(404).json({ message: 'Not found' });
+  if (!['doctor', 'pharmacist'].includes(req.user.role)) return res.status(403).json({ message: 'Forbidden' });
+  Object.assign(pres, req.body);
+  res.json(pres);
+});
+
+// ---------- Records ----------
+app.get('/api/records', authMiddleware, (req, res) => {
+  const { role, id } = req.user;
+  const data = role === 'patient' ? labReports.filter(r => r.patientId === id) : labReports;
+  res.json(data);
+});
+
+app.post('/api/records', authMiddleware, requireRole('patient'), (req, res) => {
+  const { testName, fileUrl } = req.body;
+  if (!testName || !fileUrl) return res.status(400).json({ message: 'Missing fields' });
+  const rec = { id: uuid(), patientId: req.user.id, testName, fileUrl, verifiedBy: '' };
+  labReports.push(rec);
+  res.json(rec);
+});
+
+// ---------- Demo doctor list (session storage sync via UI) ----------
+const demoDoctors = [
+  { id: 'doc-100', name: 'Dr. Rao (Cardiology)' },
+  { id: 'doc-200', name: 'Dr. Sharma (Dermatology)' },
+  { id: 'doc-300', name: 'Dr. Priya (General Medicine)' },
+];
+
+// ---------- Frontend ----------
+app.get('/', (req, res) => {
+  res.send(`
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>TeleMed — Online Medical System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --primary:#1F7AE0; --teal:#0ABAB5; --bg:#F7FAFC; --red:#DC2626; --green:#16A34A; }
+    body { margin:0; font-family:Inter, system-ui, Arial, sans-serif; background:var(--bg); color:#111; }
+    nav { display:flex; gap:16px; align-items:center; padding:12px 16px; background:var(--teal); color:#fff; }
+    nav a, nav button { color:#fff; text-decoration:none; background:transparent; border:none; cursor:pointer; font-weight:600; }
+    .container { max-width:960px; margin:24px auto; padding:0 16px; }
+    .card { background:#fff; border:1px solid #eee; border-radius:8px; padding:16px; margin-bottom:16px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    label { display:block; margin-top:8px; font-weight:600; }
+    input, select, textarea { width:100%; padding:8px; margin-top:4px; border:1px solid #ddd; border-radius:6px; }
+    button.primary { background:var(--primary); color:#fff; border:none; padding:8px 12px; border-radius:6px; margin-top:12px; cursor:pointer; }
+    button.ghost { background:transparent; border:1px solid var(--primary); color:var(--primary); padding:8px 12px; border-radius:6px; cursor:pointer; }
+    .error { color:var(--red); font-weight:600; }
+    .success { color:var(--green); font-weight:600; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef; color:#334; font-size:12px; margin-left:8px; }
+    .hidden { display:none; }
+    .section-title { font-size:20px; font-weight:700; margin-bottom:8px; }
+  </style>
+</head>
+<body>
+  <nav>
+    <button id="brandBtn">TeleMed</button>
+    <a href="#" id="recordsLink">Records</a>
+    <span style="margin-left:auto" id="navRight">
+      <a href="#" id="loginLink">Login</a>
+      <a href="#" id="registerLink">Register</a>
+    </span>
+  </nav>
+  <div class="container">
+    <div id="authCard" class="card">
+      <div class="grid">
+        <div>
+          <div class="section-title">Login</div>
+          <div id="loginError" class="error"></div>
+          <label>Email</label>
+          <input id="loginEmail" />
+          <label>Password</label>
+          <input id="loginPassword" type="password" />
+          <button class="primary" id="loginBtn">Login</button>
+        </div>
+        <div>
+          <div class="section-title">Register</div>
+          <div id="regError" class="error"></div>
+          <label>Name</label>
+          <input id="regName" />
+          <label>Email</label>
+          <input id="regEmail" />
+          <label>Password</label>
+          <input id="regPassword" type="password" />
+          <label>Role</label>
+          <select id="regRole">
+            <option value="patient">patient</option>
+            <option value="doctor">doctor</option>
+            <option value="pharmacist">pharmacist</option>
+            <option value="admin">admin</option>
+          </select>
+          <button class="primary" id="registerBtn">Create Account</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="dashPatient" class="card hidden">
+      <div class="section-title">Patient dashboard</div>
+      <div id="patError" class="error"></div>
+      <div class="card">
+        <div class="section-title">Book appointment</div>
+        <label>Doctor</label>
+        <select id="bookDoctor"></select>
+        <label>Slot</label>
+        <input id="bookSlot" type="datetime-local" />
+        <label>Notes</label>
+        <input id="bookNotes" />
+        <button class="primary" id="bookBtn">Confirm</button>
+        <div id="bookMsg" class="success"></div>
+      </div>
+      <div class="card">
+        <div class="section-title">My appointments</div>
+        <ul id="patientAppts"></ul>
+      </div>
+      <div class="card">
+        <div class="section-title">My lab reports</div>
+        <label>Test name</label>
+        <input id="recTest" />
+        <label>File URL</label>
+        <input id="recFile" />
+        <button class="primary" id="recUploadBtn">Upload</button>
+        <ul id="patientRecs"></ul>
+      </div>
+    </div>
+
+    <div id="dashDoctor" class="card hidden">
+      <div class="section-title">Doctor dashboard</div>
+      <div id="docError" class="error"></div>
+      <div class="card">
+        <div class="section-title">Today’s appointments</div>
+        <ul id="doctorAppts"></ul>
+      </div>
+      <div class="card">
+        <div class="section-title">Create e‑Prescription</div>
+        <label>Appointment ID</label>
+        <input id="rxApptId" />
+        <label>Medicines (comma separated)</label>
+        <input id="rxItems" />
+        <label>Dosage</label>
+        <input id="rxDosage" />
+        <button class="primary" id="rxCreateBtn">Sign & Save</button>
+        <div id="rxMsg" class="success"></div>
+      </div>
+      <div class="card">
+        <div class="section-title">My prescriptions</div>
+        <ul id="doctorRx"></ul>
+      </div>
+    </div>
+
+    <div id="dashPharm" class="card hidden">
+      <div class="section-title">Pharmacist inbox</div>
+      <div id="pharmError" class="error"></div>
+      <ul id="pharmRx"></ul>
+    </div>
+
+    <div id="dashAdmin" class="card hidden">
+      <div class="section-title">Admin console (demo)</div>
+      <div class="card">
+        <button class="ghost" id="addDocBtn">Add Doctor</button>
+        <ul id="adminDoctors"></ul>
+      </div>
+    </div>
+
+    <div id="recordsPage" class="card hidden">
+      <div class="section-title">Medical records</div>
+      <div id="recordsError" class="error"></div>
+      <ul id="recordsList"></ul>
+    </div>
+  </div>
+
+  <script>
+    // ---------- Simple API client using fetch ----------
+    const API_BASE = '/api';
+    let token = null;
+
+    const api = {
+      setToken: (t) => { token = t; },
+      req: async (method, url, body) => {
+        const res = await fetch(API_BASE + url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: 'Bearer ' + token } : {})
+          },
+          body: body ? JSON.stringify(body) : undefined
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          let msg = 'Error';
+          try { msg = JSON.parse(txt).message; } catch {}
+          throw new Error(msg || res.statusText);
+        }
+        return res.json();
+      },
+      get: (url) => api.req('GET', url),
+      post: (url, body) => api.req('POST', url, body),
+      put: (url, body) => api.req('PUT', url, body),
+      delete: (url) => api.req('DELETE', url),
+    };
+
+    // ---------- Storage & session ----------
+    const savedUser = JSON.parse(localStorage.getItem('user') || 'null');
+    if (savedUser?.token) api.setToken(savedUser.token);
+
+    // ---------- UI helpers ----------
+    const $ = (id) => document.getElementById(id);
+    const show = (id) => $(id).classList.remove('hidden');
+    const hide = (id) => $(id).classList.add('hidden');
+
+    // ---------- Navbar ----------
+    const updateNav = (user) => {
+      const navRight = document.getElementById('navRight');
+      if (user) {
+        navRight.innerHTML = \`\${user.name} (\${user.role}) <button id="logoutBtn" class="ghost">Logout</button>\`;
+        document.getElementById('logoutBtn').onclick = () => {
+          localStorage.removeItem('user');
+          api.setToken(null);
+          token = null;
+          location.reload();
+        };
+      } else {
+        navRight.innerHTML = '<a href="#" id="loginLink">Login</a> <a href="#" id="registerLink" style="margin-left:10px">Register</a>';
+      }
+    };
+
+    // ---------- Routing (simple) ----------
+    const goHome = () => {
+      const user = JSON.parse(localStorage.getItem('user') || 'null');
+      hide('dashPatient'); hide('dashDoctor'); hide('dashPharm'); hide('dashAdmin'); hide('recordsPage');
+      if (!user) { show('authCard'); return; }
+      hide('authCard');
+      if (user.role === 'patient') { show('dashPatient'); loadPatient(); }
+      if (user.role === 'doctor') { show('dashDoctor'); loadDoctor(); }
+      if (user.role === 'pharmacist') { show('dashPharm'); loadPharm(); }
+      if (user.role === 'admin') { show('dashAdmin'); loadAdmin(); }
+    };
+
+    $('brandBtn').onclick = goHome;
+    $('recordsLink').onclick = (e) => {
+      e.preventDefault();
+      const user = JSON.parse(localStorage.getItem('user') || 'null');
+      if (!user) return alert('Login required');
+      hide('dashPatient'); hide('dashDoctor'); hide('dashPharm'); hide('dashAdmin'); hide('authCard');
+      show('recordsPage'); loadRecordsPage();
+    };
+
+    updateNav(savedUser);
+    goHome();
+
+    // ---------- Auth actions ----------
+    $('loginBtn').onclick = async () => {
+      const email = $('loginEmail').value.trim();
+      const password = $('loginPassword').value.trim();
+      $('loginError').textContent = '';
+      if (!email.includes('@')) return $('loginError').textContent = 'Valid email required';
+      if (password.length < 6) return $('loginError').textContent = 'Password min 6 chars';
+      try {
+        const res = await api.post('/auth/login', { email, password });
+        const data = { ...res.user, token: res.token };
+        localStorage.setItem('user', JSON.stringify(data));
+        api.setToken(res.token);
+        updateNav(data);
+        goHome();
+      } catch (err) {
+        $('loginError').textContent = err.message;
+      }
+    };
+
+    $('registerBtn').onclick = async () => {
+      const name = $('regName').value.trim();
+      const email = $('regEmail').value.trim();
+      const password = $('regPassword').value.trim();
+      const role = $('regRole').value;
+      $('regError').textContent = '';
+      if (!name) return $('regError').textContent = 'Name required';
+      if (!email.includes('@')) return $('regError').textContent = 'Valid email required';
+      if (password.length < 6) return $('regError').textContent = 'Password min 6 chars';
+      try {
+        await api.post('/auth/register', { name, email, password, role });
+        $('regError').textContent = 'Registered. Please login.';
+        $('regError').className = 'success';
+      } catch (err) {
+        $('regError').className = 'error';
+        $('regError').textContent = err.message;
+      }
+    };
+
+    // ---------- Demo doctors in session ----------
+    const ensureDemoDoctors = () => {
+      const current = JSON.parse(sessionStorage.getItem('demoDoctors') || '[]');
+      if (!current.length) sessionStorage.setItem('demoDoctors', JSON.stringify(${JSON.stringify(demoDoctors)}));
+      return JSON.parse(sessionStorage.getItem('demoDoctors') || '[]');
+    };
+
+    // ---------- Patient flow ----------
+    async function loadPatient() {
+      $('bookMsg').textContent = '';
+      const docs = ensureDemoDoctors();
+      const sel = $('bookDoctor');
+      sel.innerHTML = '<option value="">-- choose --</option>' + docs.map(d => \`<option value="\${d.id}">\${d.name}</option>\`).join('');
+      try {
+        const a = await api.get('/appointments');
+        $('patientAppts').innerHTML = a.map(x => \`<li>\${new Date(x.slot).toLocaleString()} with <b>\${x.doctorId}</b> — \${x.status} <span class="badge">#\${x.id}</span></li>\`).join('');
+        const r = await api.get('/records');
+        $('patientRecs').innerHTML = r.map(x => \`<li>\${x.testName} — <a href="\${x.fileUrl}" target="_blank">file</a></li>\`).join('');
+      } catch (err) { $('patError').textContent = err.message; }
+    }
+
+    $('bookBtn').onclick = async () => {
+      const doctorId = $('bookDoctor').value;
+      const slot = $('bookSlot').value;
+      const notes = $('bookNotes').value;
+      $('patError').textContent = '';
+      if (!doctorId) return $('patError').textContent = 'Select doctor';
+      if (!slot) return $('patError').textContent = 'Pick a slot';
+      try {
+        await api.post('/appointments', { doctorId, slot, notes });
+        $('bookMsg').textContent = 'Appointment booked';
+        loadPatient();
+      } catch (err) { $('patError').textContent = err.message; }
+    };
+
+    $('recUploadBtn').onclick = async () => {
+      const testName = $('recTest').value.trim();
+      const fileUrl = $('recFile').value.trim();
+      if (!testName || !fileUrl) return $('patError').textContent = 'All fields required';
+      try {
+        await api.post('/records', { testName, fileUrl });
+        $('bookMsg').textContent = 'Record uploaded';
+        $('recTest').value = ''; $('recFile').value = '';
+        loadPatient();
+      } catch (err) { $('patError').textContent = err.message; }
+    };
+
+    // ---------- Doctor flow ----------
+    async function loadDoctor() {
+      try {
+        const a = await api.get('/appointments');
+        $('doctorAppts').innerHTML = a.map(x => \`
+          <li>
+            \${new Date(x.slot).toLocaleString()} — Patient <b>\${x.patientId}</b> — \${x.status}
+            <button class="ghost" onclick="window.markCompleted('\${x.id}')">Complete</button>
+          </li>\`).join('');
+        const p = await api.get('/prescriptions');
+        $('doctorRx').innerHTML = p.map(x => \`<li>Rx #\${x.id} — items: \${x.items.join(', ')} — \${x.fulfilled ? 'Delivered' : 'Pending'}</li>\`).join('');
+      } catch (err) { $('docError').textContent = err.message; }
+    }
+
+    window.markCompleted = async (id) => {
+      try { await api.put('/appointments/' + id, { status: 'completed' }); loadDoctor(); }
+      catch (err) { $('docError').textContent = err.message; }
+    };
+
+    $('rxCreateBtn').onclick = async () => {
+      const appointmentId = $('rxApptId').value.trim();
+      const items = $('rxItems').value.split(',').map(s => s.trim()).filter(Boolean);
+      const dosage = $('rxDosage').value.trim();
+      if (!appointmentId || !items.length) return $('docError').textContent = 'Enter appointmentId and medicines';
+      try {
+        await api.post('/prescriptions', { appointmentId, items, dosage });
+        $('rxMsg').textContent = 'Prescription saved';
+        $('rxApptId').value = ''; $('rxItems').value = ''; $('rxDosage').value = '';
+        loadDoctor();
+      } catch (err) { $('docError').textContent = err.message; }
+    };
+
+    // ---------- Pharmacist flow ----------
+    async function loadPharm() {
+      try {
+        const p = await api.get('/prescriptions');
+        $('pharmRx').innerHTML = p.map(x => \`
+          <li>
+            Rx #\${x.id} — items: \${x.items.join(', ')} — \${x.fulfilled ? 'Delivered' : 'Pending'}
+            \${x.fulfilled ? '' : '<button class="primary" onclick="window.fulfillRx(\\'' + x.id + '\\')">Fulfill</button>'}
+          </li>\`).join('');
+      } catch (err) { $('pharmError').textContent = err.message; }
+    }
+
+    window.fulfillRx = async (id) => {
+      try { await api.put('/prescriptions/' + id, { fulfilled: true }); loadPharm(); }
+      catch (err) { $('pharmError').textContent = err.message; }
+    };
+
+    // ---------- Admin flow ----------
+    async function loadAdmin() {
+      const docs = ensureDemoDoctors();
+      $('adminDoctors').innerHTML = docs.map(d => \`<li>\${d.id} — \${d.name}</li>\`).join('');
+    }
+
+    $('addDocBtn').onclick = () => {
+      const name = prompt('Enter doctor name & specialty');
+      if (!name) return;
+      const id = 'doc-' + Math.floor(Math.random()*1000);
+      const docs = ensureDemoDoctors();
+      docs.push({ id, name });
+      sessionStorage.setItem('demoDoctors', JSON.stringify(docs));
+      loadAdmin();
+    };
+
+    // ---------- Records page ----------
+    async function loadRecordsPage() {
+      try {
+        const r = await api.get('/records');
+        $('recordsList').innerHTML = r.map(x => \`<li>\${x.testName} — <a href="\${x.fileUrl}" target="_blank">file</a></li>\`).join('');
+      } catch (err) { $('recordsError').textContent = err.message; }
+    }
+  </script>
+</body>
+</html>
+  `);
+});
+
+// ---------- Start server ----------
+const PORT = 4000;
+app.listen(PORT, () => {
+  console.log('TeleMed running on http://localhost:' + PORT);
+  console.log('Open in browser to use the full app.');
+});
