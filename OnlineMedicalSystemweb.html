@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Consultation - Home</title>
+    <style>
+        /* --- 1. CSS Custom Properties for Theme Consistency --- */
+        :root {
+            --color-primary: #3b82f6; /* Blue-500 */
+            --color-secondary: #6b7280; /* Gray-500 */
+            --color-foreground: #1f2937; /* Gray-800 */
+            --color-background: #f7ff; /* Light Gray */
+            --color-destructive: #ef4444; /* Red-500 */
+            --color-primary-foreground: white;
+        }
+
+        /* --- 2. Basic Reset and Utility Class Definitions (Corrected/Defined) --- */
+        body {
+            font-family: 'Inter', sans-serif; /* A common modern sans-serif */
+            margin: 0;
+            line-height: 1.5;
+            color: var(--color-foreground);
+        }
+        
+        .font-heading { font-family: 'Georgia', serif; } /* Placeholder heading font */
+        .font-paragraph { font-family: inherit; } /* Uses body font */
+
+        .bg-background { background-color: var(--color-background); }
+        .text-foreground { color: var(--color-foreground); }
+        .text-secondary { color: var(--color-secondary); }
+        .text-primary { color: var(--color-primary); }
+        .bg-primary { background-color: var(--color-primary); }
+        .text-primary-foreground { color: var(--color-primary-foreground); }
+        .bg-white { background-color: white; }
+        .text-white\/90 { color: rgba(255, 255, 255, 0.9); }
+        
+        /* Layout and Spacing */
+        .min-h-screen { min-height: 100vh; }
+        .h-screen { height: 100vh; }
+        .grid { display: grid; }
+        .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+        .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .lg\:col-span-2 { grid-column: span 2 / span 2; }
+        .lg\:row-span-2 { grid-row: span 2 / span 2; }
+        .place-items-center { place-items: center; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .flex-grow { flex-grow: 1; }
+        .flex-wrap { flex-wrap: wrap; }
+        .md\:flex-row { flex-direction: row; }
+        .items-center { align-items: center; }
+        .justify-center { justify-content: center; }
+        .justify-between { justify-content: space-between; }
+        .flex-1 { flex: 1 1 0%; }
+        .mx-auto { margin-left: auto; margin-right: auto; }
+        .w-full { width: 100%; }
+        .h-full { height: 100%; }
+        .h-64 { height: 16rem; }
+        .h-48 { height: 12rem; }
+        .max-w-3xl { max-width: 48rem; }
+        .max-w-2xl { max-width: 42rem; }
+        .max-w-\[120rem\] { max-width: 120rem; }
+        .md\:w-80 { max-width: 20rem; } 
+
+        /* Positioning and Effects */
+        .p-8 { padding: 2rem; }
+        .px-8 { padding-left: 2rem; padding-right: 2rem; }
+        .py-24 { padding-top: 6rem; padding-bottom: 6rem; }
+        .gap-4 { gap: 1rem; }
+        .gap-6 { gap: 1.5rem; }
+        .gap-8 { gap: 2rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-3 { margin-bottom: 0.75rem; }
+        .mb-4 { margin-bottom: 1rem; }
+        .mb-6 { margin-bottom: 1.5rem; }
+        .mb-8 { margin-bottom: 2rem; }
+        .mb-16 { margin-bottom: 4rem; }
+        .text-center { text-align: center; }
+        .text-5xl { font-size: 3rem; line-height: 1; }
+        .text-6xl { font-size: 3.75rem; line-height: 1; }
+        .text-7xl { font-size: 4.5rem; line-height: 1; }
+        .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+        .text-2xl { font-size: 1.5rem; line-height: 2rem; }
+        .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+        .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+        .text-base { font-size: 1rem; line-height: 1.5rem; }
+        .font-bold { font-weight: 700; }
+        .relative { position: relative; }
+        .absolute { position: absolute; }
+        .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
+        .inset-\[-40px\] { top: -40px; right: -40px; bottom: -40px; left: -40px; }
+        .z-10 { z-index: 10; }
+        .z-20 { z-index: 20; }
+        .rounded-2xl { border-radius: 1rem; }
+        .rounded-lg { border-radius: 0.5rem; }
+        .rounded-full { border-radius: 50%; }
+        .overflow-hidden { overflow: hidden; }
+        .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+        .object-cover { object-fit: cover; }
+        .opacity-90 { opacity: 0.9; }
+
+        /* Card and Button Styles */
+        .card {
+            padding: 2rem;
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
+            transition: box-shadow 0.3s ease;
+        }
+        .card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+            cursor: pointer;
+        }
+        .button-primary {
+            background-color: var(--color-primary);
+            color: var(--color-primary-foreground);
+            border: none;
+        }
+        .button-primary:hover {
+            background-color: #2563eb; /* Darker primary color */
+        }
+        .button-outline {
+            background-color: transparent;
+            border: 1px solid currentColor;
+        }
+        .button-outline.text-primary:hover {
+            background-color: rgba(59, 130, 246, 0.05); /* Light hover effect */
+        }
+        
+        /* --- 3. Section Backgrounds --- */
+        .hero-bg {
+            /* Cleaner approximation of a very light, subtle gradient */
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), var(--color-background), rgba(173, 216, 230, 0.1));
+        }
+
+        .cta-bg {
+            /* Background for the final CTA section */
+            background-color: var(--color-primary);
+            color: var(--color-primary-foreground);
+        }
+
+        /* --- 4. Specific Component Styles --- */
+        /* Hero card gradient overlay */
+        .hero-overlay {
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.3), transparent);
+        }
+
+        /* Tilt effect classes */
+        .tilt-card {
+            transform-style: preserve-3d;
+            perspective: 1000px;
+            transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        .tilt-image-wrapper {
+            transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        /* Icon Placeholders */
+        .icon { width: 1.5rem; height: 1.5rem; display: inline-block; vertical-align: middle; }
+        .icon-lg { width: 4rem; height: 4rem; }
+        
+        /* Feature Card Overrides */
+        .card-video { 
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(173, 216, 230, 0.1)); 
+            border-color: rgba(59, 130, 246, 0.2);
+        }
+        .card-security {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.05), rgba(239, 68, 68, 0.1)); 
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+        .card-security .text-outline { color: var(--color-destructive); border-color: var(--color-destructive); }
+        .card-eprescriptions {
+            background: linear-gradient(135deg, rgba(107, 114, 128, 0.05), rgba(107, 114, 128, 0.1)); 
+            border-color: rgba(107, 114, 128, 0.2);
+        }
+        .card-eprescriptions .text-outline { color: var(--color-secondary); border-color: var(--color-secondary); }
+        .card-support {
+            background: linear-gradient(to right, rgba(59, 130, 246, 0.1), rgba(173, 216, 230, 0.1), rgba(59, 130, 246, 0.1));
+        }
+
+        /* Process Step Icon */
+        .process-icon {
+            background-color: var(--color-primary);
+            color: white;
+            border-radius: 50%; 
+            width: 4rem; 
+            height: 4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-left: auto;
+            margin-right: auto;
+            margin-bottom: 1.5rem;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-background">
+        <section class="h-screen grid place-items-center p-8 hero-bg">
+            <div
+                id="hero-card"
+                class="relative aspect-video w-full max-w-[120rem] rounded-2xl overflow-hidden shadow-2xl tilt-card"
+            >
+                <div id="hero-image-wrapper" class="absolute inset-[-40px] z-10 tilt-image-wrapper">
+                    <img
+                        src="https://static.wixstatic.com/media/f88b81_d40e46aad3fe4e188450e53e5e8424e3~mv2.jpg"
+                        alt="Medical consultation hero image"
+                        class="w-full h-full object-cover"
+                    />
+                </div>
+                <div class="absolute inset-0 z-10 hero-overlay"></div>
+                
+                <div class="absolute bottom-8 left-8 z-20 text-white max-w-3xl p-8">
+                    <h1 class="text-6xl md:text-7xl font-heading font-bold mb-6">
+                        Book Your Virtual Consultation
+                    </h1>
+                    <p class="text-xl md:text-2xl font-paragraph mb-8 text-white/90">
+                        Access quality healthcare from anywhere. Connect with doctors, manage records, and receive prescriptions online.
+                    </p>
+                    <div class="flex gap-4 flex-wrap">
+                        <a href="/login" id="cta-button-1" class="button button-primary text-lg px-8 py-6">
+                            Get Started
+                        </a>
+                        <a href="/security" id="security-button" class="button button-outline" style="border-color: white; color: white; background-color: rgba(255, 255, 255, 0.1);">
+                            Learn About Security
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="max-w-[120rem] mx-auto px-8 py-24">
+            <div class="text-center mb-16">
+                <h2 class="text-5xl font-heading font-bold text-foreground mb-4">
+                    Complete Healthcare Platform
+                </h2>
+                <p class="text-xl font-paragraph text-secondary max-w-3xl mx-auto">
+                    Everything you need for remote healthcare services in one secure platform
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 lg:row-span-2">
+                    <div class="card h-full card-video">
+                        <div class="flex flex-col h-full">
+                            <span class="icon text-primary mb-6">📹</span> 
+                            <h3 class="text-3xl font-heading font-bold text-foreground mb-4">
+                                Virtual Consultations
+                            </h3>
+                            <p class="text-lg font-paragraph text-secondary mb-6 flex-grow">
+                                Connect with healthcare professionals through secure video calls. Get diagnoses, prescriptions, and medical advice from the comfort of your home.
+                            </p>
+                            <img
+                                src="https://static.wixstatic.com/media/f88b81_7ec573a6148a4870b214e7db7c81b144~mv2.jpg"
+                                alt="Video consultation interface"
+                                class="w-full h-64 object-cover rounded-lg mb-6"
+                            />
+                            <a href="/video-consultation" class="button button-primary w-full">
+                                Start Video Call
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="card h-full bg-white">
+                        <span class="icon text-primary mb-4">📅</span> 
+                        <h3 class="text-2xl font-heading font-bold text-foreground mb-3">
+                            Book Appointments
+                        </h3>
+                        <p class="text-base font-paragraph text-secondary mb-6">
+                            Schedule appointments with doctors at your convenience. View availability and book instantly.
+                        </p>
+                        <a href="/appointments" class="button button-outline w-full text-primary" style="border-color: var(--color-primary);">
+                            View Calendar
+                        </a>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="card h-full card-security">
+                        <span class="icon" style="color: var(--color-destructive); margin-bottom: 1rem;">🛡</span> 
+                        <h3 class="text-2xl font-heading font-bold text-foreground mb-3">
+                            Advanced Security
+                        </h3>
+                        <p class="text-base font-paragraph text-secondary mb-6">
+                            Your health data is protected with enterprise-grade security, CAPTCHA verification, and encryption.
+                        </p>
+                        <a href="/security" class="button button-outline w-full text-outline" style="border-color: var(--color-destructive); color: var(--color-destructive);">
+                            Security Details
+                        </a>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2">
+                    <div class="card h-full bg-white">
+                        <div class="flex flex-col md:flex-row gap-6 items-center">
+                            <div class="flex-1">
+                                <span class="icon text-primary mb-4">📄</span> 
+                                <h3 class="text-2xl font-heading font-bold text-foreground mb-3">
+                                    Medical Records & Lab Reports
+                                </h3>
+                                <p class="text-base font-paragraph text-secondary mb-6">
+                                    Access your complete medical history, lab results, and prescriptions anytime. All your health information in one secure place.
+                                </p>
+                                <a href="/records" class="button button-primary">
+                                    View Records
+                                </a>
+                            </div>
+                            <img
+                                src="https://static.wixstatic.com/media/f88b81_8020f8e811e843a8af6a9df533d90e92~mv2.jpg"
+                                alt="Medical records dashboard"
+                                class="w-full md:w-80 h-48 object-cover rounded-lg"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="card h-full card-eprescriptions">
+                        <span class="icon text-secondary mb-4">🕒</span> 
+                        <h3 class="text-2xl font-heading font-bold text-foreground mb-3">
+                            E-Prescriptions
+                        </h3>
+                        <p class="text-base font-paragraph text-secondary mb-6">
+                            Receive digital prescriptions instantly. Track medications and refill requests easily.
+                        </p>
+                        <a href="/prescriptions" class="button button-outline w-full text-secondary" style="border-color: var(--color-secondary); color: var(--color-secondary);">
+                            Manage Prescriptions
+                        </a>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-3">
+                    <div class="card card-support">
+                        <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                            <div class="flex items-center gap-6">
+                                <span class="icon icon-lg" style="color: var(--color-primary);">👥</span> 
+                                <div>
+                                    <h3 class="text-3xl font-heading font-bold text-foreground mb-2">
+                                        24/7 Healthcare Support
+                                    </h3>
+                                    <p class="text-lg font-paragraph text-secondary">
+                                        Our medical team is always available to assist you with any health concerns
+                                    </p>
+                                </div>
+                            </div>
+                            <button class="button button-primary text-lg px-8" onclick="alert('Contacting support...')">
+                                Contact Support
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="py-24" style="background: linear-gradient(135deg, rgba(173, 216, 230, 0.2), rgba(59, 130, 246, 0.05));">
+            <div class="max-w-[120rem] mx-auto px-8">
+                <div class="text-center mb-16">
+                    <h2 class="text-5xl font-heading font-bold text-foreground mb-4">
+                        How It Works
+                    </h2>
+                    <p class="text-xl font-paragraph text-secondary max-w-3xl mx-auto">
+                        Getting started with virtual healthcare is simple and secure
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="text-center">
+                        <div class="process-icon">1</div>
+                        <h3 class="text-2xl font-heading font-bold text-foreground mb-4">
+                            Create Account
+                        </h3>
+                        <p class="text-lg font-paragraph text-secondary">
+                            Sign up securely with our protected authentication system
+                        </p>
+                    </div>
+
+                    <div class="text-center">
+                        <div class="process-icon">2</div>
+                        <h3 class="text-2xl font-heading font-bold text-foreground mb-4">
+                            Book Appointment
+                        </h3>
+                        <p class="text-lg font-paragraph text-secondary">
+                            Choose your doctor and schedule a convenient time slot
+                        </p>
+                    </div>
+
+                    <div class="text-center">
+                        <div class="process-icon">3</div>
+                        <h3 class="text-2xl font-heading font-bold text-foreground mb-4">
+                            Start Consultation
+                        </h3>
+                        <p class="text-lg font-paragraph text-secondary">
+                            Connect via secure video call and receive care instantly
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="py-24 cta-bg">
+            <div class="max-w-[120rem] mx-auto px-8 text-center">
+                <div>
+                    <h2 class="text-5xl font-heading font-bold mb-6">
+                        Ready to Get Started?
+                    </h2>
+                    <p class="text-xl font-paragraph mb-8 max-w-2xl mx-auto opacity-90">
+                        Join thousands of patients who trust our platform for their healthcare needs
+                    </p>
+                    <button
+                        onclick="window.location.href='/login'"
+                        class="button bg-white text-primary hover:bg-white/90 text-lg px-12 py-6"
+                    >
+                        Sign Up Now
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // --- Vanilla JS for Framer Motion 3D Tilt Effect Simulation ---
+
+        const cardRef = document.getElementById('hero-card');
+        const imageWrapperRef = document.getElementById('hero-image-wrapper');
+        const ctaButton1 = document.getElementById('cta-button-1');
+        const securityButton = document.getElementById('security-button');
+
+        // Simple state simulation for demonstration purposes
+        // Setting to 'true' will demonstrate the change in button text/links
+        const isAuthenticated = false; 
+
+        if (isAuthenticated) {
+            // If authenticated, change the button links/text
+            ctaButton1.href = '/appointments';
+            ctaButton1.textContent = 'Book Appointment';
+            
+            // Remove the 'Learn About Security' button
+            if (securityButton) {
+                securityButton.remove();
+            }
+
+            // Add the 'Start Video Call' button (replaces security link)
+            const ctaContainer = ctaButton1.parentElement;
+            const videoCallButton = document.createElement('a');
+            videoCallButton.href = '/video-consultation';
+            videoCallButton.className = 'button button-outline text-lg px-8 py-6';
+            videoCallButton.textContent = 'Start Video Call';
+            videoCallButton.style.cssText = 'border-color: white; color: white; background-color: rgba(255, 255, 255, 0.1);';
+            ctaContainer.appendChild(videoCallButton);
+        }
+
+        // Tilt Effect Logic
+        if (cardRef) {
+            const clamp = (num, min, max) => Math.min(Math.max(num, min), max);
+
+            const handleMouseMove = (e) => {
+                const rect = cardRef.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+
+                const mouseX = e.clientX - centerX;
+                const mouseY = e.clientY - centerY;
+
+                // Normalize mouse values to -1 to 1 based on a max range (e.g., 300px from center)
+                const range = 300; 
+                const normalizedX = clamp(mouseX / range, -1, 1);
+                const normalizedY = clamp(mouseY / range, -1, 1);
+
+                // Calculate rotation (max rotation 10 degrees)
+                // Invert Y for X rotation, as per Framer Motion convention for tilt
+                const maxRotation = 10;
+                const rotateX = normalizedY * -maxRotation; 
+                const rotateY = normalizedX * maxRotation;
+
+                // Calculate image parallax (max parallax 20px)
+                const maxParallax = 20;
+                const parallaxX = normalizedX * -maxParallax;
+                const parallaxY = normalizedY * -maxParallax;
+
+                // Apply styles to tilt the card and shift the image layer
+                cardRef.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.02)`;
+                imageWrapperRef.style.transform = `translate3d(${parallaxX}px, ${parallaxY}px, 0)`;
+            };
+
+            const handleMouseLeave = () => {
+                // Reset styles
+                cardRef.style.transform = 'rotateX(0deg) rotateY(0deg) scale(1)';
+                imageWrapperRef.style.transform = 'translate3d(0, 0, 0)';
+            };
+
+            cardRef.addEventListener('mousemove', handleMouseMove);
+            cardRef.addEventListener('mouseleave', handleMouseLeave);
+        }
+    </script>
+</body>
+</html>
